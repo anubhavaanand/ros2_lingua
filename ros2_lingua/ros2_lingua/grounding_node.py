@@ -49,10 +49,12 @@ class GroundingNode(Node):
 
         # --- Parameters ---
         self.declare_parameter("llm_backend", "openai")  # openai | anthropic | ollama | mock
-        self.declare_parameter("llm_model", "gpt-4o")
+        self.declare_parameter("llm_model", "")
         self.declare_parameter("ollama_host", "http://localhost:11434")
         self.declare_parameter("auto_chain", True)
         self.declare_parameter("cache_ttl_sec", 0.0)
+        # Fixed JSON reply for the mock backend (tests and demos); empty uses its default reply
+        self.declare_parameter("mock_response", "")
 
         # --- Core objects ---
         self._registry = CapabilityRegistry()
@@ -102,7 +104,8 @@ class GroundingNode(Node):
 
     def _build_engine(self) -> GroundingEngine:
         backend_name = self.get_parameter("llm_backend").value
-        model = self.get_parameter("llm_model").value
+        model = self.get_parameter("llm_model").value.strip()
+        model_options = {"model": model} if model else {}
         auto_chain = self.get_parameter("auto_chain").value
         cache_ttl_sec = self.get_parameter("cache_ttl_sec").value
 
@@ -116,16 +119,16 @@ class GroundingNode(Node):
             )
 
         if backend_name == "openai":
-            backend = OpenAIBackend(api_key=api_key, model=model)
+            backend = OpenAIBackend(api_key=api_key, **model_options)
         elif backend_name == "anthropic":
-            backend = AnthropicBackend(api_key=api_key, model=model)
+            backend = AnthropicBackend(api_key=api_key, **model_options)
         elif backend_name == "ollama":
             host = self.get_parameter("ollama_host").value
-            backend = OllamaBackend(model=model, host=host)
+            backend = OllamaBackend(host=host, **model_options)
         elif backend_name == "mock":
             from ros2_lingua_core.backends import MockBackend
 
-            backend = MockBackend()
+            backend = MockBackend(fixed_response=self.get_parameter("mock_response").value)
         else:
             raise ValueError(
                 f"Unknown llm_backend '{backend_name}'. "
